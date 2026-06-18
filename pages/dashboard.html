@@ -1,0 +1,148 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../css/style.css"><script src="../js/util.js"></script>
+<style>
+.loading-overlay {
+  position:fixed;inset:0;background:var(--bg);z-index:999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+}
+.loading-logo { width:72px;height:72px;object-fit:contain;border-radius:16px;animation:pulse 1.5s infinite }
+.loading-spinner {
+  width:48px;height:48px;border:4px solid var(--border2);
+  border-top-color:var(--red2);border-radius:50%;animation:spin .8s linear infinite;
+}
+.loading-msg { font-size:14px;font-weight:700;color:var(--fg2) }
+.loading-sub { font-size:12px;color:var(--muted) }
+@keyframes spin { to { transform:rotate(360deg) } }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.5} }
+</style>
+</head><body>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loading">
+  <img src="../logo.png" class="loading-logo" onerror="this.replaceWith(document.createTextNode('🚀'))">
+  <div class="loading-spinner"></div>
+  <div class="loading-msg">Verificando seu PC...</div>
+  <div class="loading-sub">Aguarde enquanto analisamos o sistema</div>
+</div>
+
+<!-- CONTEÚDO -->
+<div class="page-content" id="conteudo" style="display:none">
+  <div class="page-header">
+    <h1>🚀 Bem-vindo ao <span>CleanBoost</span></h1>
+    <p id="subData"></p>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card"><div><div class="kpi-label">CPU em uso</div><div class="kpi-value" id="kCPU" style="font-size:28px">—</div></div><div class="kpi-icon" style="background:var(--red-bg)">💻</div></div>
+    <div class="kpi-card"><div><div class="kpi-label">RAM em uso</div><div class="kpi-value" id="kRAM" style="font-size:28px">—</div></div><div class="kpi-icon" style="background:var(--orange-bg)">🧠</div></div>
+    <div class="kpi-card"><div><div class="kpi-label">Disco C: livre</div><div class="kpi-value" id="kDisco" style="font-size:22px">—</div></div><div class="kpi-icon" style="background:var(--blue-bg)">💾</div></div>
+    <div class="kpi-card"><div><div class="kpi-label">PC ligado há</div><div class="kpi-value" id="kUptime" style="font-size:18px">—</div></div><div class="kpi-icon" style="background:var(--green-bg)">⏱️</div></div>
+  </div>
+
+  <div id="alertasBox" style="margin-bottom:16px"></div>
+
+  <div class="grid-2">
+    <div class="card card-red">
+      <div class="card-header"><span class="card-title">⚡ Limpeza Rápida</span></div>
+      <div class="card-body" style="text-align:center;padding:24px">
+        <div style="font-size:44px;margin-bottom:10px">🧹</div>
+        <div style="font-size:13px;color:var(--fg2);margin-bottom:6px">Limpa Temp, cache de navegadores e Lixeira</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:18px" id="ultimaLimpeza">Verificando...</div>
+        <button class="btn btn-red" onclick="limpezaRapida()" id="btnLimpeza" style="width:100%;justify-content:center;padding:12px;font-size:14px">🚀 Limpar Agora</button>
+        <div id="resLimpeza" style="display:none;margin-top:12px;font-size:15px;font-weight:900;color:var(--green)"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">💡 Recomendações</span></div>
+      <div class="card-body" id="dicasBox" style="padding:12px 16px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron')
+document.getElementById('subData').textContent = new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+
+async function carregar() {
+  document.getElementById('loading').style.display = 'flex'
+  document.getElementById('conteudo').style.display = 'none'
+
+  const [hw, disco, cpu] = await Promise.all([
+    ipcRenderer.invoke('diag:hardware'),
+    ipcRenderer.invoke('diag:disco'),
+    ipcRenderer.invoke('diag:cpu'),
+  ])
+
+  document.getElementById('loading').style.display = 'none'
+  document.getElementById('conteudo').style.display = 'block'
+
+  if (hw.ok) {
+    const rPct = hw.ramUsoPct
+    document.getElementById('kRAM').textContent    = rPct+'%'
+    document.getElementById('kRAM').style.color    = rPct>85?'var(--red3)':rPct>70?'var(--orange)':'var(--green)'
+    document.getElementById('kUptime').textContent = hw.uptimeFmt
+
+    const discoC = disco.discos?.find(d=>d.letra==='C:') || disco.discos?.[0]
+    if (discoC) {
+      const pct = (discoC.livre/discoC.total*100)
+      document.getElementById('kDisco').textContent = (discoC.livre/1073741824).toFixed(1)+' GB'
+      document.getElementById('kDisco').style.color = pct<10?'var(--red3)':pct<20?'var(--orange)':'var(--green)'
+    }
+
+    const al = []
+    if (rPct > 85) al.push({c:'alerta-red',    t:`🔴 RAM crítica: ${rPct}% em uso. Feche programas para liberar memória.`})
+    else if (rPct > 70) al.push({c:'alerta-orange', t:`🟠 RAM alta: ${rPct}% em uso. Feche abas desnecessárias.`})
+    if (discoC) {
+      const pct=(discoC.livre/discoC.total*100)
+      if (pct<10) al.push({c:'alerta-red',    t:`💾 Disco quase cheio! Apenas ${(discoC.livre/1073741824).toFixed(1)} GB livres. Execute a limpeza!`})
+      else if (pct<20) al.push({c:'alerta-orange', t:`💾 Pouco espaço em disco: ${(discoC.livre/1073741824).toFixed(1)} GB livres em C:.`})
+    }
+    if (!al.length) al.push({c:'alerta-green', t:'✅ Sistema em boas condições! Nenhum alerta crítico.'})
+    document.getElementById('alertasBox').innerHTML = al.map(a=>`<div class="alerta ${a.c}">${a.t}</div>`).join('')
+
+    const dicas = []
+    if (rPct>70) dicas.push({i:'🧠',t:'RAM alta — feche programas',d:'Feche abas e aplicativos não usados para liberar memória.'})
+    dicas.push({i:'🧹',t:'Limpeza regular',d:'Execute a limpeza semanalmente para manter o PC rápido.'})
+    dicas.push({i:'🚀',t:'Inicialização lenta?',d:'Verifique os programas de inicialização e desative os desnecessários.'})
+    document.getElementById('dicasBox').innerHTML = dicas.map(d=>`
+      <div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:20px;flex-shrink:0">${d.i}</div>
+        <div><div style="font-size:12px;font-weight:700;color:var(--fg)">${d.t}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${d.d}</div></div>
+      </div>`).join('')
+  }
+
+  if (cpu.uso !== undefined) {
+    const u=cpu.uso
+    document.getElementById('kCPU').textContent=u+'%'
+    document.getElementById('kCPU').style.color=u>80?'var(--red3)':u>50?'var(--orange)':'var(--green)'
+  }
+
+  const hist = await ipcRenderer.invoke('hist:ler')
+  document.getElementById('ultimaLimpeza').textContent = hist.length
+    ? `Última: ${hist[0].data} · ${fmtBytes(hist[0].bytes)} liberados`
+    : 'Nenhuma limpeza realizada ainda'
+}
+
+async function limpezaRapida() {
+  const btn=document.getElementById('btnLimpeza')
+  btn.disabled=true; btn.innerHTML='<span class="spin">⚙️</span> Limpando...'
+  const r = await ipcRenderer.invoke('limpar:executar',['temp','chrome','edge','lixeira'])
+  const el=document.getElementById('resLimpeza')
+  el.textContent=`✅ ${fmtBytes(r.totalBytes)} liberados!`; el.style.display='block'
+  setTimeout(()=>el.style.display='none',5000)
+  btn.disabled=false; btn.innerHTML='🚀 Limpar Agora'
+  carregar()
+}
+
+carregar()
+setInterval(async () => {
+  if (document.getElementById('loading').style.display !== 'none') return
+  const cpu = await ipcRenderer.invoke('diag:cpu')
+  if (cpu.uso !== undefined) {
+    const u=cpu.uso
+    document.getElementById('kCPU').textContent=u+'%'
+    document.getElementById('kCPU').style.color=u>80?'var(--red3)':u>50?'var(--orange)':'var(--green)'
+  }
+}, 10000)
+</script></body></html>

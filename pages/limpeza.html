@@ -1,0 +1,104 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../css/style.css"><script src="../js/util.js"></script></head><body>
+<div class="page-content">
+  <div class="page-hdr-row page-header">
+    <div><h1>🧹 Limpeza do <span>PC</span></h1><p>Selecione o que deseja limpar e libere espaço</p></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="analisar()" id="btnAnalisar">🔍 Analisar</button>
+      <button class="btn btn-red"   onclick="limpar()"   id="btnLimpar" disabled>🧹 Limpar Selecionados</button>
+    </div>
+  </div>
+
+  <!-- Status geral -->
+  <div id="statusBox" style="display:none;margin-bottom:16px">
+    <div class="alerta alerta-orange" id="statusMsg"></div>
+  </div>
+
+  <!-- Itens -->
+  <div id="itensBox">
+    <div style="text-align:center;padding:48px;color:var(--muted)">
+      <div style="font-size:48px;margin-bottom:12px">🔍</div>
+      <div style="font-size:14px;font-weight:700;color:var(--fg2)">Clique em "Analisar" para verificar o que pode ser limpo</div>
+    </div>
+  </div>
+
+  <!-- Log de execução -->
+  <div id="logBox" style="display:none">
+    <div class="card">
+      <div class="card-header"><span class="card-title">📋 Resultado da Limpeza</span></div>
+      <div class="card-body">
+        <div style="font-size:24px;font-weight:900;color:var(--green);margin-bottom:12px" id="totalLiberado"></div>
+        <div id="logItens" style="font-size:13px;line-height:2;color:var(--fg2)"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="aviso" id="avisoEl"></div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron')
+let _itens = []
+
+async function analisar() {
+  const btn = document.getElementById('btnAnalisar')
+  btn.disabled = true; btn.innerHTML = '<span class="spin">⚙️</span> Analisando...'
+
+  document.getElementById('logBox').style.display = 'none'
+  document.getElementById('itensBox').innerHTML = `<div style="text-align:center;padding:32px;color:var(--muted)"><span class="spin" style="font-size:32px">⚙️</span><div style="margin-top:12px">Analisando arquivos...</div></div>`
+
+  const r = await ipcRenderer.invoke('limpar:analisar')
+  _itens = r.itens
+  btn.disabled = false; btn.innerHTML = '🔍 Analisar'
+
+  const total = r.totalBytes
+  document.getElementById('statusBox').style.display = 'block'
+  document.getElementById('statusMsg').textContent = `📊 Total encontrado para limpeza: ${fmtBytes(total)} — Selecione os itens e clique em Limpar`
+  document.getElementById('statusMsg').className = `alerta ${total > 104857600 ? 'alerta-red' : 'alerta-orange'}`
+
+  document.getElementById('itensBox').innerHTML = _itens.map(item => `
+    <label class="item-check" id="item_${item.id}" onclick="toggleItem('${item.id}',this)">
+      <input type="checkbox" id="chk_${item.id}" checked onchange="atualizarBotao()">
+      <div style="flex:1">
+        <div class="item-nome">${item.icon} ${item.nome}</div>
+        <div class="item-desc">${item.descricao}</div>
+      </div>
+      <div class="item-size">${fmtBytes(item.bytes)}</div>
+    </label>`).join('')
+
+  atualizarBotao()
+}
+
+function toggleItem(id, label) {
+  label.classList.toggle('selected')
+  atualizarBotao()
+}
+
+function atualizarBotao() {
+  const sel = _itens.filter(i => document.getElementById('chk_'+i.id)?.checked)
+  const total = sel.reduce((s,i) => s + i.bytes, 0)
+  const btn = document.getElementById('btnLimpar')
+  btn.disabled = sel.length === 0
+  btn.textContent = sel.length ? `🧹 Limpar ${sel.length} item(s) — ${fmtBytes(total)}` : '🧹 Limpar Selecionados'
+}
+
+async function limpar() {
+  const ids = _itens.filter(i => document.getElementById('chk_'+i.id)?.checked).map(i => i.id)
+  if (!ids.length) return
+
+  confirmar(`Limpar ${ids.length} item(s)? Esta ação não pode ser desfeita.`, async ok => {
+    if (!ok) return
+    const btn = document.getElementById('btnLimpar')
+    btn.disabled = true; btn.innerHTML = '<span class="spin">⚙️</span> Limpando...'
+
+    const r = await ipcRenderer.invoke('limpar:executar', ids)
+
+    document.getElementById('logBox').style.display = 'block'
+    document.getElementById('totalLiberado').textContent = `✅ ${fmtBytes(r.totalBytes)} liberados!`
+    document.getElementById('logItens').innerHTML = r.log.map(l => `<div>${l}</div>`).join('')
+
+    btn.disabled = false; btn.textContent = '🧹 Limpar Selecionados'
+    analisar()
+  })
+}
+</script></body></html>

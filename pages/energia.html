@@ -1,0 +1,73 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../css/style.css"><script src="../js/util.js"></script></head><body>
+<div class="page-content">
+  <div class="page-header"><h1>⚡ Plano de <span>Energia</span></h1><p>Otimize o desempenho do PC alterando o plano de energia</p></div>
+
+  <div class="card card-red" style="margin-bottom:16px">
+    <div class="card-header"><span class="card-title">📋 Plano Atual</span></div>
+    <div class="card-body" style="text-align:center;padding:24px">
+      <div style="font-size:40px;margin-bottom:10px" id="energyIcon">⚡</div>
+      <div style="font-size:20px;font-weight:900;color:var(--fg);margin-bottom:4px" id="planoNome">Verificando...</div>
+      <div style="font-size:12px;color:var(--muted)" id="planoDesc"></div>
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="card" id="card_economia" style="cursor:pointer;transition:all .2s" onclick="alterar('a1841308-3541-4fab-bc81-f71556f20b4a')">
+      <div class="card-body" style="text-align:center;padding:20px">
+        <div style="font-size:32px;margin-bottom:8px">🔋</div>
+        <div style="font-size:14px;font-weight:800;color:var(--fg)">Economia de Energia</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Reduz desempenho para economizar energia. Para notebooks na bateria.</div>
+      </div>
+    </div>
+    <div class="card" id="card_equilibrado" style="cursor:pointer;transition:all .2s" onclick="alterar('381b4222-f694-41f0-9685-ff5bb260df2e')">
+      <div class="card-body" style="text-align:center;padding:20px">
+        <div style="font-size:32px;margin-bottom:8px">⚖️</div>
+        <div style="font-size:14px;font-weight:800;color:var(--fg)">Equilibrado</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Balanceia desempenho e consumo. Padrão do Windows.</div>
+      </div>
+    </div>
+    <div class="card card-red" id="card_desempenho" style="cursor:pointer;transition:all .2s" onclick="alterar('8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c')">
+      <div class="card-body" style="text-align:center;padding:20px">
+        <div style="font-size:32px;margin-bottom:8px">🚀</div>
+        <div style="font-size:14px;font-weight:800;color:var(--red3)">Alto Desempenho</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Máximo desempenho do processador. Recomendado para PCs fixos.</div>
+      </div>
+    </div>
+  </div>
+  <div class="alerta alerta-yellow" style="margin-top:4px">💡 Para deixar o PC mais rápido, recomendamos o plano <b>Alto Desempenho</b>. Em notebooks pode consumir mais bateria.</div>
+  <div class="aviso" id="avisoEl"></div>
+</div>
+<script>
+const { ipcRenderer } = require('electron')
+const PLANOS = {
+  'a1841308-3541-4fab-bc81-f71556f20b4a': { nome:'Economia de Energia', desc:'Desempenho reduzido para economizar energia', icon:'🔋', card:'card_economia' },
+  '381b4222-f694-41f0-9685-ff5bb260df2e': { nome:'Equilibrado', desc:'Balanceia desempenho e consumo de energia', icon:'⚖️', card:'card_equilibrado' },
+  '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c': { nome:'Alto Desempenho', desc:'Máximo desempenho — recomendado para PCs', icon:'🚀', card:'card_desempenho' },
+  'e9a42b02-d5df-448d-aa00-03f14749eb61': { nome:'Alto Desempenho Extremo', desc:'Máximo absoluto de desempenho', icon:'⚡', card:'' },
+}
+
+async function carregar() {
+  const r = await ipcRenderer.invoke('energia:status')
+  const info = PLANOS[r.guid?.toLowerCase()] || { nome: r.nome, desc: 'Plano personalizado', icon: '⚡' }
+  document.getElementById('planoNome').textContent = info.nome
+  document.getElementById('planoDesc').textContent = info.desc
+  document.getElementById('energyIcon').textContent = info.icon
+  // Destacar card ativo
+  Object.values(PLANOS).forEach(p => {
+    const c = document.getElementById(p.card)
+    if (c) c.style.borderColor = p.card === info.card ? 'var(--red)' : 'var(--border)'
+  })
+}
+
+async function alterar(guid) {
+  const info = PLANOS[guid] || {}
+  confirmar(`Alterar para o plano "${info.nome}"?`, async ok => {
+    if (!ok) return
+    const r = await ipcRenderer.invoke('energia:alterar', guid)
+    if (r.ok) { aviso('ok', `✅ Plano alterado para ${info.nome}`); carregar() }
+    else aviso('erro', '❌ Erro: ' + r.erro)
+  })
+}
+carregar()
+</script></body></html>

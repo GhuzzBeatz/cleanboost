@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>CleanBoost</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/licenca.js"></script>
+<script>
+  if (!licencaAtivaCB()) window.location.replace('pages/licenca.html')
+</script>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon" style="background:transparent;padding:0;overflow:hidden"><img src="logo.png" style="width:40px;height:40px;object-fit:cover;border-radius:12px"></div>
+      <div>
+        <div class="logo-brand"><span>Clean</span>Boost</div>
+        <div class="logo-sub">Otimizador de PC</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" onclick="ir('pages/dashboard.html',this)">
+        <span class="nav-icon">🏠</span> Dashboard
+      </button>
+      <button class="nav-btn" onclick="ir('pages/limpeza.html',this)">
+        <span class="nav-icon">🧹</span> Limpeza
+      </button>
+      <button class="nav-btn" onclick="ir('pages/diagnostico.html',this)">
+        <span class="nav-icon">🖥️</span> Diagnóstico do PC
+      </button>
+      <button class="nav-btn" onclick="ir('pages/inicializacao.html',this)">
+        <span class="nav-icon">🚀</span> Inicialização
+      </button>
+      <button class="nav-btn" onclick="ir('pages/energia.html',this)">
+        <span class="nav-icon">⚡</span> Energia
+      </button>
+      <button class="nav-btn" onclick="ir('pages/historico.html',this)">
+        <span class="nav-icon">📋</span> Histórico
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="ghz-brand">GHZ Plugin</div>
+      <div class="version-txt">CleanBoost v1.0</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbarTitle">🏠 Dashboard</div>
+      <div class="topbar-right">
+        <div id="topbarClock" style="font-family:monospace;font-size:13px;color:#555"></div>
+      </div>
+    </div>
+    <div class="page">
+      <iframe id="frame" class="iframe-page" src="pages/dashboard.html"></iframe>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const TITULOS = {
+  'dashboard.html':     '🏠 Dashboard',
+  'limpeza.html':       '🧹 Limpeza do PC',
+  'diagnostico.html':   '🖥️ Diagnóstico do PC',
+  'inicializacao.html': '🚀 Programas de Inicialização',
+  'energia.html':       '⚡ Plano de Energia',
+  'historico.html':     '📋 Histórico de Limpezas',
+}
+
+function ir(url, btn) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'))
+  if (btn) btn.classList.add('active')
+  document.getElementById('frame').src = url
+  document.getElementById('topbarTitle').textContent = TITULOS[url.split('/').pop()] || url
+}
+
+// Relógio
+function tick() {
+  document.getElementById('topbarClock').textContent =
+    new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+tick(); setInterval(tick, 1000)
+</script>
+</body>
+</html>

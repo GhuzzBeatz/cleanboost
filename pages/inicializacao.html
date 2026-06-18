@@ -1,0 +1,110 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../css/style.css"><script src="../js/util.js"></script>
+<style>
+.loading-overlay{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.loading-spinner{width:44px;height:44px;border:4px solid var(--border2);border-top-color:var(--red2);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head><body>
+
+<div class="loading-overlay" id="loading">
+  <img src="../logo.png" style="width:64px;height:64px;object-fit:contain;border-radius:14px;opacity:.8" onerror="this.style.display='none'">
+  <div class="loading-spinner"></div>
+  <div style="font-size:14px;font-weight:700;color:var(--fg2)">Lendo programas de inicialização...</div>
+  <div style="font-size:12px;color:var(--muted)">Consultando o registro do Windows</div>
+</div>
+
+<div class="page-content" id="conteudo" style="display:none">
+  <div class="page-hdr-row page-header">
+    <div>
+      <h1>🚀 Programas de <span>Inicialização</span></h1>
+      <p>Programas que abrem automaticamente com o Windows. Desative os desnecessários para acelerar a inicialização.</p>
+    </div>
+    <button class="btn btn-outline" onclick="carregar()" id="btnAtualizar">🔍 Atualizar Lista</button>
+  </div>
+
+  <div class="alerta alerta-orange" style="margin-bottom:14px">
+    ⚠️ Desative apenas programas que você conhece e não são essenciais. <b>Não desative antivírus ou drivers.</b>
+  </div>
+
+  <div id="contadorBox" style="margin-bottom:12px;font-size:13px;color:var(--muted)"></div>
+
+  <div class="card tbl-wrap">
+    <table>
+      <thead><tr><th>Programa</th><th>Caminho / Comando</th><th>Origem</th><th style="text-align:center">Ação</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="aviso" id="avisoEl"></div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron')
+let _items = []
+
+async function carregar() {
+  document.getElementById('loading').style.display  = 'flex'
+  document.getElementById('conteudo').style.display = 'none'
+
+  const r = await ipcRenderer.invoke('inicio:listar')
+  _items = r.items
+
+  document.getElementById('loading').style.display  = 'none'
+  document.getElementById('conteudo').style.display = 'block'
+
+  const total = _items.length
+  document.getElementById('contadorBox').textContent = total
+    ? `${total} programa(s) encontrado(s) na inicialização do Windows`
+    : ''
+
+  document.getElementById('tbody').innerHTML = _items.length
+    ? _items.map((item, i) => {
+        const origem = item.registro === 'STARTUP_FOLDER'
+          ? 'Pasta Startup'
+          : item.registro.includes('HKCU') ? 'Usuário' : 'Sistema'
+        const corOrigem = origem === 'Sistema' ? 'b-red' : origem === 'Pasta Startup' ? 'b-yellow' : 'b-blue'
+        return `<tr id="row_${i}">
+          <td style="font-weight:700;color:var(--fg)">${item.nome || '(sem nome)'}</td>
+          <td style="font-size:11px;color:var(--muted);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.caminho}">${item.caminho}</td>
+          <td><span class="badge ${corOrigem}">${origem}</span></td>
+          <td style="text-align:center">
+            <button class="btn btn-red" style="font-size:11px;padding:5px 14px" onclick="desativar(${i})">🗑️ Desativar</button>
+          </td>
+        </tr>`}).join('')
+    : `<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--muted)">
+        <div style="font-size:32px;margin-bottom:8px">✅</div>
+        <div style="font-size:13px">Nenhum programa de inicialização encontrado.</div>
+        <div style="font-size:11px;margin-top:4px;color:#444">Tente executar o app como administrador para ver todos os programas.</div>
+      </td></tr>`
+}
+
+async function desativar(i) {
+  const item = _items[i]
+  confirmar(`Desativar "${item.nome}" da inicialização do Windows?`, async ok => {
+    if (!ok) return
+    if (item.registro === 'STARTUP_FOLDER') {
+      // Arquivo na pasta Startup — deletar o atalho
+      try {
+        const { ipcRenderer } = require('electron')
+        const r = await ipcRenderer.invoke('inicio:desativar', { registro: item.registro, nome: item.nome, caminho: item.caminho })
+        if (r.ok) { _items.splice(i, 1); renderizar(); aviso('ok', `✅ "${item.nome}" removido da inicialização.`) }
+        else aviso('erro', '❌ Erro: ' + r.erro)
+      } catch(e) { aviso('erro', '❌ Erro: ' + e.message) }
+    } else {
+      const r = await ipcRenderer.invoke('inicio:desativar', { registro: item.registro, nome: item.nome })
+      if (r.ok) { _items.splice(i, 1); renderizar(); aviso('ok', `✅ "${item.nome}" removido da inicialização.`) }
+      else aviso('erro', '❌ Erro: ' + r.erro)
+    }
+  })
+}
+
+function renderizar() {
+  document.getElementById('contadorBox').textContent = _items.length
+    ? `${_items.length} programa(s) encontrado(s) na inicialização do Windows`
+    : ''
+  // Re-render table
+  carregar()
+}
+
+carregar()
+</script></body></html>

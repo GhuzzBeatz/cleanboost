@@ -1,0 +1,210 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../css/style.css"><script src="../js/util.js"></script>
+<style>
+.loading-overlay {
+  position:fixed;inset:0;background:var(--bg);z-index:999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+}
+.loading-spinner {
+  width:52px;height:52px;border:5px solid var(--border2);
+  border-top-color:var(--red2);border-radius:50%;animation:spin .8s linear infinite;
+}
+.loading-steps { display:flex;flex-direction:column;gap:6px;margin-top:8px }
+.loading-step  { font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px }
+.loading-step.ativo { color:var(--fg2) }
+.loading-step.ok    { color:var(--green) }
+@keyframes spin { to { transform:rotate(360deg) } }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.5} }
+</style>
+</head><body>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loading">
+  <img src="../logo.png" style="width:72px;height:72px;object-fit:contain;border-radius:16px;animation:pulse 1.5s infinite" onerror="this.style.display='none'">
+  <div class="loading-spinner"></div>
+  <div style="font-size:15px;font-weight:800;color:var(--fg)">Analisando seu PC</div>
+  <div class="loading-steps" id="loadingSteps">
+    <div class="loading-step ativo" id="step1">⚙️ Coletando informações do sistema...</div>
+    <div class="loading-step"       id="step2">💾 Verificando discos...</div>
+    <div class="loading-step"       id="step3">📊 Calculando uso de CPU e RAM...</div>
+    <div class="loading-step"       id="step4">🔍 Gerando diagnóstico...</div>
+  </div>
+</div>
+
+<!-- CONTEÚDO -->
+<div class="page-content" id="conteudo" style="display:none">
+  <div class="page-hdr-row page-header">
+    <div><h1>🖥️ Diagnóstico do <span>PC</span></h1><p>Hardware, alertas e desempenho em tempo real</p></div>
+    <button class="btn btn-outline" onclick="carregar()" id="btnAtualizar">🔄 Atualizar</button>
+  </div>
+
+  <div id="alertasBox" style="margin-bottom:16px"></div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header"><span class="card-title">📊 Monitor em Tempo Real</span><span style="font-size:11px;color:var(--muted)" id="monitorTick"></span></div>
+    <div class="card-body">
+      <div class="grid-3">
+        <div style="text-align:center">
+          <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.07em">CPU</div>
+          <div style="position:relative;width:100px;height:100px;margin:0 auto 10px">
+            <svg width="100" height="100" style="transform:rotate(-90deg)">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--bg2)" stroke-width="10"/>
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--red2)" stroke-width="10" stroke-dasharray="264" id="cpuCircle" stroke-dashoffset="264" stroke-linecap="round" style="transition:stroke-dashoffset .5s"/>
+            </svg>
+            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:900;color:var(--fg)" id="cpuPct">—</div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);max-width:120px;margin:0 auto" id="cpuNome">—</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.07em">RAM</div>
+          <div style="position:relative;width:100px;height:100px;margin:0 auto 10px">
+            <svg width="100" height="100" style="transform:rotate(-90deg)">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--bg2)" stroke-width="10"/>
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--orange)" stroke-width="10" stroke-dasharray="264" id="ramCircle" stroke-dashoffset="264" stroke-linecap="round" style="transition:stroke-dashoffset .5s"/>
+            </svg>
+            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:900;color:var(--fg)" id="ramPct">—</div>
+          </div>
+          <div style="font-size:11px;color:var(--muted)" id="ramDetalhe">—</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.07em;text-align:center">DISCO</div>
+          <div id="discoList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><span class="card-title">💻 Informações do Sistema</span></div>
+      <div class="card-body" style="padding:0"><table style="width:100%"><tbody id="tbSistema"></tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">🔧 Hardware</span></div>
+      <div class="card-body" style="padding:0"><table style="width:100%"><tbody id="tbHW"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron')
+
+function linha(label, valor) {
+  if (!valor || valor.trim() === '' || valor === 'N/D' || valor === 'x' || valor === '|') return ''
+  return `<tr>
+    <td style="padding:9px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;width:140px;border-bottom:1px solid var(--border);white-space:nowrap">${label}</td>
+    <td style="padding:9px 14px;font-size:12.5px;color:var(--fg2);border-bottom:1px solid var(--border)">${valor}</td>
+  </tr>`
+}
+
+function setCircle(id, pct, cor) {
+  const c = document.getElementById(id); if (!c) return
+  c.style.strokeDashoffset = 264 - (264 * Math.min(pct, 100) / 100)
+  if (cor) c.style.stroke = cor
+}
+
+function setStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('step' + i)
+    if (!el) continue
+    if (i < n)  el.className = 'loading-step ok',   el.textContent = '✅ ' + el.textContent.slice(2)
+    if (i === n) el.className = 'loading-step ativo'
+    if (i > n)  el.className = 'loading-step'
+  }
+}
+
+async function carregar() {
+  document.getElementById('loading').style.display   = 'flex'
+  document.getElementById('conteudo').style.display  = 'none'
+  document.getElementById('btnAtualizar').innerHTML  = '<span class="spin">🔄</span>'
+
+  setStep(1)
+  const hw = await ipcRenderer.invoke('diag:hardware')
+
+  setStep(2)
+  const disco = await ipcRenderer.invoke('diag:disco')
+
+  setStep(3)
+  const cpu = await ipcRenderer.invoke('diag:cpu')
+
+  setStep(4)
+  await new Promise(r => setTimeout(r, 400)) // pequena pausa para o usuário ver "Gerando diagnóstico"
+
+  document.getElementById('loading').style.display  = 'none'
+  document.getElementById('conteudo').style.display = 'block'
+  document.getElementById('btnAtualizar').innerHTML = '🔄 Atualizar'
+  document.getElementById('monitorTick').textContent = 'Atualizado: ' + new Date().toLocaleTimeString('pt-BR')
+
+  if (hw.ok) {
+    const rPct = hw.ramUsoPct
+    document.getElementById('ramPct').textContent = rPct+'%'
+    setCircle('ramCircle', rPct, rPct>85?'var(--red3)':rPct>70?'var(--orange)':'var(--orange)')
+    document.getElementById('ramDetalhe').textContent = `${fmtBytes(hw.totalRam - hw.livreRam)} / ${fmtBytes(hw.totalRam)}`
+    document.getElementById('cpuNome').textContent = (hw.cpu||'').slice(0,40)
+
+    const al = []
+    if (rPct>85) al.push({c:'alerta-red',    t:`🔴 RAM crítica: ${rPct}% em uso.`})
+    else if (rPct>70) al.push({c:'alerta-orange', t:`🟠 RAM alta: ${rPct}% em uso. Considere fechar aplicativos.`})
+    if (disco.discos?.length) {
+      for (const d of disco.discos) {
+        const pct=d.livre/d.total*100
+        if (pct<10) al.push({c:'alerta-red',    t:`💾 Disco ${d.letra} quase cheio! Apenas ${fmtBytes(d.livre)} livres.`})
+        else if (pct<20) al.push({c:'alerta-orange', t:`💾 Disco ${d.letra}: pouco espaço (${fmtBytes(d.livre)} livres de ${fmtBytes(d.total)}).`})
+      }
+    }
+    if (!al.length) al.push({c:'alerta-green', t:'✅ Nenhum alerta crítico. Sistema funcionando bem!'})
+    document.getElementById('alertasBox').innerHTML = al.map(a=>`<div class="alerta ${a.c}">${a.t}</div>`).join('')
+
+    document.getElementById('tbSistema').innerHTML = [
+      linha('Computador', hw.nomePC),
+      linha('Sistema', hw.sistemaOp),
+      linha('Versão OS', hw.versaoOS),
+      linha('Fabricante', hw.fabricante),
+      linha('Modelo', hw.modelo),
+      linha('PC ligado há', hw.uptimeFmt),
+    ].join('')
+
+    document.getElementById('tbHW').innerHTML = [
+      linha('Processador', hw.cpu),
+      linha('Núcleos', hw.cpuNucleos ? hw.cpuNucleos+' núcleos' : ''),
+      linha('RAM total', fmtBytes(hw.totalRam)),
+      linha('RAM modelo', hw.ramDetalhe),
+      linha('Placa-mãe', hw.placaMae),
+      linha('Placa de vídeo', hw.placaVideo),
+      linha('Resolução', hw.resolucao),
+      linha('Armazenamento', hw.hds),
+    ].join('')
+  }
+
+  if (cpu.uso !== undefined) {
+    document.getElementById('cpuPct').textContent = cpu.uso+'%'
+    setCircle('cpuCircle', cpu.uso, cpu.uso>80?'var(--red3)':cpu.uso>50?'var(--orange)':'var(--red2)')
+  }
+
+  if (disco.discos?.length) {
+    document.getElementById('discoList').innerHTML = disco.discos.map(d => {
+      const pct=Math.round(d.usado/d.total*100)
+      const cor=pct>90?'var(--red3)':pct>75?'var(--orange)':'var(--green)'
+      return `<div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
+          <span style="font-weight:700;color:var(--fg)">${d.letra}</span>
+          <span style="color:var(--muted)">${fmtBytes(d.livre)} livres</span>
+        </div>
+        <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%;background:${cor}"></div></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px">${pct}% usado de ${fmtBytes(d.total)}</div>
+      </div>`
+    }).join('')
+  }
+}
+
+carregar()
+setInterval(async () => {
+  if (document.getElementById('loading').style.display !== 'none') return
+  const cpu = await ipcRenderer.invoke('diag:cpu')
+  if (cpu.uso !== undefined) {
+    document.getElementById('cpuPct').textContent = cpu.uso+'%'
+    setCircle('cpuCircle', cpu.uso, cpu.uso>80?'var(--red3)':cpu.uso>50?'var(--orange)':'var(--red2)')
+    document.getElementById('monitorTick').textContent = 'Atualizado: ' + new Date().toLocaleTimeString('pt-BR')
+  }
+}, 5000)
+</script></body></html>
