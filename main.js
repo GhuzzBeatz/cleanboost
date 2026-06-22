@@ -3,8 +3,12 @@ const path    = require('path')
 const fs      = require('fs')
 const os      = require('os')
 const { execSync, exec } = require('child_process')
+const createLocalLicenseGate = require('./js/local-license-gate')
 
 app.setName('CleanBoost')
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) app.quit()
 
 // ── DADOS ──────────────────────────────────────────────────
 function getDataDir() {
@@ -24,6 +28,17 @@ function salvarJSON(nome, dados) {
 
 // ── JANELA ─────────────────────────────────────────────────
 let win = null
+const licenseGate = createLocalLicenseGate({
+  storageKey: '@CLEANBOOST:licenca', prefix: 'CLEAN', salt: 'GHZ2026CLEANBOOST', multiplier: 41
+})
+
+app.on('second-instance', () => {
+  if (!win) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+})
+
 function createWindow() {
   const dir = getDataDir()
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -34,10 +49,11 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true, nodeIntegrationInSubFrames: true,
       contextIsolation: false, webSecurity: false,
+      devTools: !app.isPackaged,
       additionalArguments: ['--data-dir=' + dir]
     }
   })
-  win.loadFile('index.html')
+  licenseGate.attach(win)
   win.once('ready-to-show', () => { win.show(); win.focus() })
   setTimeout(() => { if (win && !win.isVisible()) win.show() }, 4000)
   win.on('page-title-updated', e => e.preventDefault())
@@ -423,5 +439,10 @@ ipcMain.handle('dados:ler',    async (e, nome) => lerJSON(nome, {}))
 ipcMain.handle('dados:salvar', async (e, nome, dados) => { salvarJSON(nome, dados); return { ok: true } })
 
 // ── CICLO ──────────────────────────────────────────────────
-app.whenReady().then(createWindow)
+app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return
+  createWindow()
+  await win.loadFile('pages/licenca.html')
+  if (await licenseGate.authorizeFromStorage(win)) await win.loadFile('index.html')
+})
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
