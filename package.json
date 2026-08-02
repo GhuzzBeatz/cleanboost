@@ -6,7 +6,9 @@
   "author": "GHZ Plugin",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win --x64"
+    "build": "npm run build:x64 && npm run build:ia32",
+    "build:x64": "electron-builder --win --x64",
+    "build:ia32": "electron-builder --win --ia32"
   },
   "build": {
     "appId": "com.ghzplugin.cleanboost",
@@ -24,7 +26,8 @@
         {
           "target": "nsis",
           "arch": [
-            "x64"
+            "x64",
+            "ia32"
           ]
         }
       ],
@@ -35,7 +38,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "CleanBoost"
+      "shortcutName": "CleanBoost",
+      "artifactName": "${productName} Setup ${version} ${arch}.${ext}"
     },
     "extraResources": [
       {
