@@ -37,11 +37,8 @@ jobs:
           $pkg = Get-Content package.json -Raw | ConvertFrom-Json
           "APP_VERSION=$($pkg.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Build setup (x64)
-        run: npm run build:x64 -- --publish never
-
-      - name: Build setup (ia32 / 32-bit)
-        run: npm run build:ia32 -- --publish never
+      - name: Build setup (x64 + ia32)
+        run: npm run build -- --publish never
 
       - name: Resolve setup files
         shell: pwsh

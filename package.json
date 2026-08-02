@@ -6,9 +6,7 @@
   "author": "GHZ Plugin",
   "scripts": {
     "start": "electron .",
-    "build": "npm run build:x64 && npm run build:ia32",
-    "build:x64": "electron-builder --win --x64",
-    "build:ia32": "electron-builder --win --ia32"
+    "build": "electron-builder --win"
   },
   "build": {
     "appId": "com.ghzplugin.cleanboost",
