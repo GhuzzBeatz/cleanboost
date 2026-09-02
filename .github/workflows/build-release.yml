@@ -37,39 +37,35 @@ jobs:
           $pkg = Get-Content package.json -Raw | ConvertFrom-Json
           "APP_VERSION=$($pkg.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Build setup
+      - name: Build setup (x64 + ia32)
         run: npm run build -- --publish never
 
-      - name: Resolve setup file
+      - name: Resolve setup files
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist_installer -File -Recurse |
-            Where-Object { $_.Name -like '*.exe' -and $_.Name -notlike '*.blockmap' -and $_.Name -like '*Setup*' } |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
+          $setups = Get-ChildItem dist_installer -File -Recurse |
+            Where-Object { $_.Name -like '*Setup*' -and $_.Name -like '*.exe' -and $_.Name -notlike '*.blockmap' }
 
-          if (-not $setup) {
-            $setup = Get-ChildItem dist_installer -File -Recurse |
-              Where-Object { $_.Name -like '*.exe' -and $_.Name -notlike '*.blockmap' } |
-              Sort-Object Length -Descending |
-              Select-Object -First 1
+          if (-not $setups) {
+            throw 'Nenhum instalador .exe encontrado em dist_installer.'
           }
 
-          if (-not $setup) {
-            throw 'Setup .exe nao encontrado em dist_installer.'
+          foreach ($arch in @('x64', 'ia32')) {
+            if (-not ($setups.Name -like "*$arch*")) {
+              throw "Instalador para arquitetura '$arch' nao encontrado em dist_installer."
+            }
           }
 
-          "SETUP_NAME=$($setup.Name)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "SETUP_PATH=$($setup.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $setups | ForEach-Object { Write-Host "Instalador encontrado: $($_.Name)" }
 
       - name: Create or update release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ env.APP_VERSION }}
           name: CleanBoost v${{ env.APP_VERSION }}
-          body: Build automatico - CleanBoost v${{ env.APP_VERSION }}
+          body: Build automatico - CleanBoost v${{ env.APP_VERSION }} (instaladores de 64 bits e 32 bits)
           files: |
-            ${{ env.SETUP_PATH }}
+            dist_installer/*Setup*.exe
           overwrite_files: true
 
       - name: Commit version bump
