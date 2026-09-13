@@ -271,7 +271,7 @@ Formato exato:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add . -- ':!node_modules' ':!dist' ':!dist_installer' ':!release' ':!out' ':!build' ':!.ghz-support-autofix.cjs' ':!.ghz-support-result.json'
           git reset -- .ghz-support-autofix.cjs .ghz-support-result.json 2>$null
           git commit -m "fix(support): $env:TICKET_CODE [skip ci]"
           git push origin "HEAD:$env:DEFAULT_BRANCH"
@@ -321,5 +321,6 @@ Formato exato:
             notes = "Workflow ${{ github.repository }} falhou: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } | ConvertTo-Json -Depth 4
           Invoke-RestMethod -Uri "$env:SUPPORT_API_URL?action=release_ready" -Method Post -Headers @{ "X-GHZ-Token" = $env:SUPPORT_WEBHOOK_TOKEN } -ContentType "application/json" -Body $payload
+
 
 
