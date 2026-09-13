@@ -1,4 +1,4 @@
-name: Update CONTEXTO_CODEX
+name: Contexto_App
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: update-context-codex
+  group: contexto-app
   cancel-in-progress: false
 
 jobs:
@@ -56,7 +56,7 @@ jobs:
             exit 0
           fi
 
-          SUBJECT="[GHZ] CONTEXTO_CODEX concluido - ${GITHUB_REPOSITORY}"
+          SUBJECT="[GHZ] Contexto App GitHub - ${GITHUB_REPOSITORY}"
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           DATE_BR="$(TZ=America/Sao_Paulo date '+%d/%m/%Y %H:%M:%S')"
 
@@ -66,16 +66,16 @@ jobs:
           Subject: ${SUBJECT}
           Content-Type: text/plain; charset=UTF-8
 
-          Rotina semanal concluida com sucesso.
+          Rotina semanal Contexto App concluida com sucesso.
 
           Repositorio: ${GITHUB_REPOSITORY}
-          Status do contexto: ${CONTEXT_STATUS}
+          Status do Contexto App: ${CONTEXT_STATUS}
           Data/Hora Brasil: ${DATE_BR}
           Workflow: ${GITHUB_WORKFLOW}
           Execucao: ${RUN_URL}
 
-          Se o status for "updated", o CONTEXTO_CODEX.md recebeu alteracoes e foi commitado.
-          Se o status for "already_up_to_date", o contexto ja estava atualizado.
+          Se o status for "updated", o arquivo de contexto do app recebeu alteracoes e foi commitado.
+          Se o status for "already_up_to_date", o Contexto App ja estava atualizado.
           EOF
 
           sed -i 's/^          //' email.txt
@@ -86,3 +86,4 @@ jobs:
             --mail-rcpt "${SMTP_TO}" \
             --user "${SMTP_USER}:${SMTP_PASS}" \
             --upload-file email.txt
+
