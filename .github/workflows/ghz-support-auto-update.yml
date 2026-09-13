@@ -1,0 +1,325 @@
+name: GHZ Support Auto Update
+
+on:
+  repository_dispatch:
+    types: [ghz_support_ticket_approved]
+  workflow_dispatch:
+    inputs:
+      ticket_code:
+        description: "Codigo do ticket GHZ"
+        required: true
+        type: string
+      admin_note:
+        description: "Orientacao aprovada pelo admin"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  actions: read
+
+concurrency:
+  group: ghz-support-${{ github.event.client_payload.ticket_code || inputs.ticket_code || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  SUPPORT_API_URL: https://ghzplugin.com.br/api/ghz-support.php
+  TICKET_CODE: ${{ github.event.client_payload.ticket_code || inputs.ticket_code }}
+  APP_ID: ${{ github.event.client_payload.app_id || '' }}
+  APP_NAME: ${{ github.event.client_payload.app_name || github.event.repository.name }}
+  SUPPORT_TYPE: ${{ github.event.client_payload.support_type || '' }}
+  APP_AREA: ${{ github.event.client_payload.app_area || '' }}
+  CUSTOMER_VERSION: ${{ github.event.client_payload.customer_version || '' }}
+  LATEST_VERSION: ${{ github.event.client_payload.latest_version || '' }}
+  AI_SUMMARY: ${{ github.event.client_payload.ai_summary || '' }}
+  AI_SUGGESTION: ${{ github.event.client_payload.ai_suggestion || '' }}
+  ADMIN_NOTE: ${{ github.event.client_payload.admin_note || inputs.admin_note || '' }}
+
+jobs:
+  auto-update:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Sync default branch
+        shell: pwsh
+        run: |
+          $branch = "${{ github.event.repository.default_branch }}"
+          if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "master" }
+          git fetch origin $branch
+          git checkout $branch
+          git pull --ff-only origin $branch
+          "DEFAULT_BRANCH=$branch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Validate secrets
+        shell: pwsh
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SUPPORT_WEBHOOK_TOKEN: ${{ secrets.SUPPORT_WEBHOOK_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY)) { throw "OPENAI_API_KEY nao configurado no repositorio." }
+          if ([string]::IsNullOrWhiteSpace($env:SUPPORT_WEBHOOK_TOKEN)) { throw "SUPPORT_WEBHOOK_TOKEN nao configurado no repositorio." }
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          if (Test-Path package-lock.json) { npm ci } else { npm install }
+
+      - name: Create support context
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path support-tickets | Out-Null
+          $path = Join-Path support-tickets "$env:TICKET_CODE.md"
+          @"
+          # $env:TICKET_CODE
+
+          App: $env:APP_NAME ($env:APP_ID)
+          Tipo: $env:SUPPORT_TYPE
+          Tela/area: $env:APP_AREA
+          Versao cliente: $env:CUSTOMER_VERSION
+          Versao mais recente antes da correcao: $env:LATEST_VERSION
+
+          ## Resumo da Guadalupe
+          $env:AI_SUMMARY
+
+          ## Solucao sugerida
+          $env:AI_SUGGESTION
+
+          ## Orientacao aprovada pelo admin
+          $env:ADMIN_NOTE
+          "@ | Set-Content -Path $path -Encoding utf8
+
+      - name: Apply Guadalupe technical fix
+        shell: pwsh
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+        run: |
+          $script = @'
+          const fs = require('fs');
+          const path = require('path');
+
+          const root = process.cwd();
+          const ticket = {
+            code: process.env.TICKET_CODE || '',
+            appId: process.env.APP_ID || '',
+            appName: process.env.APP_NAME || '',
+            supportType: process.env.SUPPORT_TYPE || '',
+            appArea: process.env.APP_AREA || '',
+            customerVersion: process.env.CUSTOMER_VERSION || '',
+            latestVersion: process.env.LATEST_VERSION || '',
+            aiSummary: process.env.AI_SUMMARY || '',
+            aiSuggestion: process.env.AI_SUGGESTION || '',
+            adminNote: process.env.ADMIN_NOTE || '',
+          };
+
+          const skipDirs = new Set(['.git', 'node_modules', 'dist', 'dist_installer', 'release', 'out', 'build', 'coverage', '.next', '.cache']);
+          const allowedExt = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.html', '.css', '.json', '.md']);
+          const skipFiles = new Set(['package-lock.json']);
+          const files = [];
+
+          function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              const rel = path.relative(root, full).replace(/\\/g, '/');
+              if (entry.isDirectory()) {
+                if (!skipDirs.has(entry.name)) walk(full);
+                continue;
+              }
+              if (skipFiles.has(entry.name)) continue;
+              if (!allowedExt.has(path.extname(entry.name).toLowerCase())) continue;
+              const stat = fs.statSync(full);
+              if (stat.size > 60000) continue;
+              files.push(rel);
+            }
+          }
+          walk(root);
+
+          let total = 0;
+          const selected = [];
+          for (const rel of files.sort()) {
+            const text = fs.readFileSync(path.join(root, rel), 'utf8');
+            if (total + text.length > 320000) continue;
+            selected.push({ path: rel, content: text });
+            total += text.length;
+            if (selected.length >= 90) break;
+          }
+
+          const prompt = `Voce e a Guadalupe tecnica da GHZ Plugin. Aplique uma correcao minima e segura neste repositorio Electron/Node para atender o ticket aprovado.
+
+Regras obrigatorias:
+- Retorne somente JSON valido, sem markdown.
+- Nao invente arquivos grandes nem reescreva o projeto inteiro.
+- Altere somente arquivos realmente necessarios.
+- Preserve o comportamento existente.
+- Se precisar apenas melhorar mensagem/tratamento de erro, faca isso no ponto mais proximo do problema.
+- Nao altere segredos, tokens, .env ou arquivos de build gerados.
+- Nao atualize package-lock; o workflow cuida disso se a versao mudar.
+
+Ticket aprovado:
+${JSON.stringify(ticket, null, 2)}
+
+Arquivos disponiveis:
+${selected.map(f => `--- FILE: ${f.path}\n${f.content}`).join('\n\n')}
+
+Formato exato:
+{"summary":"resumo tecnico curto","changes":[{"path":"caminho/relativo.ext","content":"conteudo completo do arquivo"}]}`;
+
+          async function main() {
+            const res = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+                temperature: 0.2,
+                messages: [
+                  { role: 'system', content: 'Voce edita codigo com precisao e retorna apenas JSON valido.' },
+                  { role: 'user', content: prompt },
+                ],
+              }),
+            });
+            const body = await res.text();
+            if (!res.ok) throw new Error(`OpenAI falhou: ${res.status} ${body.slice(0, 500)}`);
+            const data = JSON.parse(body);
+            let text = data.choices?.[0]?.message?.content || '';
+            text = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+            const plan = JSON.parse(text);
+            if (!plan || !Array.isArray(plan.changes) || plan.changes.length === 0) throw new Error('A Guadalupe nao retornou alteracoes de codigo.');
+
+            for (const change of plan.changes) {
+              if (!change || typeof change.path !== 'string' || typeof change.content !== 'string') throw new Error('Formato de alteracao invalido.');
+              const rel = change.path.replace(/\\/g, '/');
+              if (rel.startsWith('/') || rel.includes('..') || rel.startsWith('.git/') || rel.includes('/.git/')) throw new Error(`Caminho inseguro: ${rel}`);
+              const target = path.join(root, rel);
+              fs.mkdirSync(path.dirname(target), { recursive: true });
+              fs.writeFileSync(target, change.content, 'utf8');
+            }
+            fs.writeFileSync('.ghz-support-result.json', JSON.stringify({ summary: plan.summary || '', changed: plan.changes.map(c => c.path) }, null, 2), 'utf8');
+          }
+          main().catch(err => { console.error(err); process.exit(1); });
+          '@
+          Set-Content -Path .ghz-support-autofix.cjs -Value $script -Encoding utf8
+          node .ghz-support-autofix.cjs
+
+      - name: Run tests
+        shell: pwsh
+        run: npm run test --if-present
+
+      - name: Ensure code changed
+        shell: pwsh
+        run: |
+          if (git diff --quiet) { throw "Nenhuma alteracao real foi gerada; release cancelada." }
+
+      - name: Bump version
+        shell: pwsh
+        run: |
+          npm version patch --no-git-tag-version
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          "APP_VERSION=$($pkg.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $notes = "Atualizacao automatica GHZ Support para o ticket $env:TICKET_CODE."
+          if (Test-Path .ghz-support-result.json) {
+            $result = Get-Content .ghz-support-result.json -Raw | ConvertFrom-Json
+            if ($result.summary) { $notes = "$notes $($result.summary)" }
+          }
+          "RELEASE_NOTES=$notes" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          try { npm run build -- --publish never } catch { npm run build }
+
+      - name: Prepare release asset
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $product = $pkg.build.productName
+          if ([string]::IsNullOrWhiteSpace($product)) { $product = $pkg.name }
+          $repoName = "${{ github.event.repository.name }}"
+          switch ($repoName) {
+            "ZAPBOT-COM-IA" { $staticName = "ZapBot-IA-Update.exe" }
+            default { $staticName = "$product.Setup.exe" }
+          }
+          $setup = Get-ChildItem -File -Recurse |
+            Where-Object { $_.Name -like "*.exe" -and $_.Name -notlike "*.blockmap" -and ($_.FullName -match "dist|installer|release|out") } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $setup) { throw "Setup .exe nao encontrado." }
+          $staticPath = Join-Path $setup.DirectoryName $staticName
+          Copy-Item $setup.FullName $staticPath -Force
+          $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $staticPath).Hash.ToLowerInvariant()
+          "SETUP_NAME=$staticName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SETUP_PATH=$staticPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SETUP_SHA256=$sha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Commit changes
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git reset -- .ghz-support-autofix.cjs .ghz-support-result.json 2>$null
+          git commit -m "fix(support): $env:TICKET_CODE [skip ci]"
+          git push origin "HEAD:$env:DEFAULT_BRANCH"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ env.APP_VERSION }}
+          name: ${{ env.APP_NAME }} v${{ env.APP_VERSION }}
+          body: |
+            ${{ env.APP_NAME }} v${{ env.APP_VERSION }}
+            ${{ env.RELEASE_NOTES }}
+            sha256: ${{ env.SETUP_SHA256 }}
+          files: |
+            ${{ env.SETUP_PATH }}
+          overwrite_files: true
+          make_latest: true
+
+      - name: Notify GHZ support success
+        if: ${{ success() }}
+        shell: pwsh
+        env:
+          SUPPORT_WEBHOOK_TOKEN: ${{ secrets.SUPPORT_WEBHOOK_TOKEN }}
+        run: |
+          $payload = @{
+            ticket_code = $env:TICKET_CODE
+            app_id = $env:APP_ID
+            status = "success"
+            version = $env:APP_VERSION
+            download_url = "https://ghzplugin.com.br/api/ghz-update.php?app=$env:APP_ID&download=1"
+            release_url = "https://github.com/${{ github.repository }}/releases/tag/v$env:APP_VERSION"
+            notes = $env:RELEASE_NOTES
+          } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Uri "$env:SUPPORT_API_URL?action=release_ready" -Method Post -Headers @{ "X-GHZ-Token" = $env:SUPPORT_WEBHOOK_TOKEN } -ContentType "application/json" -Body $payload
+
+      - name: Notify GHZ support failure
+        if: ${{ failure() }}
+        shell: pwsh
+        env:
+          SUPPORT_WEBHOOK_TOKEN: ${{ secrets.SUPPORT_WEBHOOK_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SUPPORT_WEBHOOK_TOKEN)) { exit 0 }
+          $payload = @{
+            ticket_code = $env:TICKET_CODE
+            app_id = $env:APP_ID
+            status = "failed"
+            notes = "Workflow ${{ github.repository }} falhou: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Uri "$env:SUPPORT_API_URL?action=release_ready" -Method Post -Headers @{ "X-GHZ-Token" = $env:SUPPORT_WEBHOOK_TOKEN } -ContentType "application/json" -Body $payload
+
+
