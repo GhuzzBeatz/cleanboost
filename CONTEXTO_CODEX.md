@@ -4,7 +4,7 @@ Este arquivo e a memoria curta do app para abrir tarefas novas sem depender de c
 
 ## Identidade
 - Produto: CleanBoost
-- Pasta local principal: CLEANBOOST
+- Pasta local principal: manter conforme projeto local do app
 - Repositorio GitHub: https://github.com/GhuzzBeatz/cleanboost
 - package.name: cleanboost
 - package.version atual: 1.0.2
@@ -30,18 +30,23 @@ Este arquivo e a memoria curta do app para abrir tarefas novas sem depender de c
 - Se migrar para Supabase no futuro, manter fallback/periodo de transicao para clientes existentes.
 
 ## Downloads e releases
-- Supabase download API: https://wpkaaxarresldcstaatj.supabase.co/functions/v1/ghz-app-downloads
-- Manifest: https://wpkaaxarresldcstaatj.supabase.co/functions/v1/ghz-app-downloads?app=cleanboost
-- Download direto: https://wpkaaxarresldcstaatj.supabase.co/functions/v1/ghz-app-downloads?app=cleanboost&download=1
+- GHZ update API: https://ghzplugin.com.br/api/ghz-update.php
+- Manifest: https://ghzplugin.com.br/api/ghz-update.php?app=cleanboost
+- Download direto: https://ghzplugin.com.br/api/ghz-update.php?app=cleanboost&download=1
+- Versao publicada no manifest local: 1.0.2
 - Repo release usado pelo roteador: https://github.com/GhuzzBeatz/cleanboost/releases
-- Se o repositorio for privado, o token de GitHub fica apenas como secret da Edge Function, nunca dentro do app.
+- Asset esperado pelo roteador de downloads: CleanBoost.Setup.exe
+- Se o repositorio for privado, o token de GitHub fica apenas como secret da Edge Function/GitHub Actions, nunca dentro do app.
 - Notas de release nao devem vazar URL interna, token ou link temporario.
 
 ## Stack e pontos de entrada
-- Base comum encontrada nos apps: Electron + HTML/CSS/JS, empacotamento por electron-builder, instalador Windows NSIS quando aplicavel.
-- Entrada declarada no package.json: main.js.
-- Telas ficam normalmente em `index.html`, `pages/`, `components/`, `js/` e `assets/`.
-- Testes, quando existirem, ficam em `tests/`; validar pelo script `npm test`/scripts do package antes de release.
+- Stack detectada: Electron + HTML/CSS/JS, empacotamento por electron-builder quando package.json tiver build.
+- Entrada declarada no package.json: main.js
+- Scripts npm: start, build
+- Telas ficam normalmente em index.html, pages/, components/, js/, css/ e assets/.
+- Base de ajuda IA, quando existir, fica em docs/ai/.
+- Backend/edge functions, quando existir, fica em cloud/ ou supabase/.
+- Testes, quando existirem, ficam em tests/; validar pelo script npm test ou validacao direcionada antes de release.
 
 ## Fluxo recomendado para uma tarefa nova
 1. Leia este arquivo primeiro.

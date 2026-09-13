@@ -1,0 +1,38 @@
+name: Update CONTEXTO_CODEX
+
+on:
+  schedule:
+    - cron: "30 10 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-context-codex
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Update context file
+        run: node scripts/update-context-codex.mjs
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CONTEXTO_CODEX.md
+          if git diff --cached --quiet; then
+            echo "CONTEXTO_CODEX.md already up to date."
+          else
+            git commit -m "docs: atualiza CONTEXTO_CODEX semanal"
+            git push
+          fi
