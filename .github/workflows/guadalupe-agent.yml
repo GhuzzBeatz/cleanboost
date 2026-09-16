@@ -50,7 +50,7 @@ jobs:
     needs: preflight
     if: inputs.preflight_only != true
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
         with:
@@ -78,6 +78,7 @@ jobs:
               number = issue.data.number;
             }
             core.setOutput('issue', String(number));
+            core.setOutput('mode', payload.execution_mode || 'fix');
             fs.writeFileSync('/tmp/guadalupe-request.txt', `Voce e Guadalupe, agente tecnica da GHZ Plugin. Investigue e resolva o pedido abaixo neste repositorio. Leia o contexto, localize o fluxo real e rode testes. Nao transfira verificacoes que pode fazer para o administrador. Nao invente diagnostico. Se houver um defeito comprovado no codigo, corrija minimamente e adicione teste de regressao. Nao altere workflows, segredos, licencas, dados de clientes nem versao. Nao publique nada: o workflow cuida disso. Se depender de configuracao externa inacessivel, explique precisamente o bloqueio. Nao considere melhor mensagem de erro como correcao da causa. Responda em portugues com diagnostico, testes, limitacoes e se a causa foi de fato corrigida.\n\nPEDIDO AUTORIZADO:\n${body}`);
             await github.rest.issues.createComment({...context.repo, issue_number: number, body: `Guadalupe iniciou a analise real no GitHub. Execucao: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`});
       - name: Dependencias
@@ -100,10 +101,13 @@ jobs:
             {"type":"object","properties":{"resolved":{"type":"boolean"},"summary":{"type":"string"},"tests":{"type":"string"},"blockers":{"type":"string"}},"required":["resolved","summary","tests","blockers"],"additionalProperties":false}
       - name: Validar resultado e testes
         id: verify
+        env:
+          EXECUTION_MODE: ${{ steps.task.outputs.mode }}
         run: |
           node - <<'NODE'
           const fs = require('fs'), cp = require('child_process');
           const result = JSON.parse(fs.readFileSync('/tmp/guadalupe-result.json', 'utf8'));
+          if (process.env.EXECUTION_MODE === 'analyze') { fs.appendFileSync(process.env.GITHUB_OUTPUT, 'resolved=false\n'); process.exit(0); }
           if (!result.resolved) { fs.appendFileSync(process.env.GITHUB_OUTPUT, 'resolved=false\n'); process.exit(0); }
           const files = cp.execFileSync('git', ['status','--porcelain'], {encoding:'utf8'}).split('\n').filter(Boolean).map(line => line.slice(3));
           if (!files.length) throw new Error('Agente disse resolvido sem alteracao verificavel.');
