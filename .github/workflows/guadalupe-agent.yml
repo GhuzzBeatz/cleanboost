@@ -22,7 +22,7 @@ env:
   APP_DIRECTORY: .
   RELEASE_WORKFLOW: build-release.yml
 concurrency:
-  group: guadalupe-agent
+  group: guadalupe-agent-${{ github.workflow_sha }}
   cancel-in-progress: false
 jobs:
   preflight:
