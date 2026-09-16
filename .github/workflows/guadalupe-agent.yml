@@ -1,0 +1,147 @@
+name: Guadalupe - analisar e corrigir
+run-name: Guadalupe tarefa ${{ github.event.client_payload.issue_number || inputs.issue_number || github.run_id }}
+on:
+  repository_dispatch:
+    types: [ghz_admin_chat_task]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue com o pedido completo
+        required: true
+        type: string
+      preflight_only:
+        description: Verificar infraestrutura sem IA e sem modificar aplicativo
+        required: false
+        default: false
+        type: boolean
+permissions:
+  contents: write
+  issues: write
+  actions: write
+env:
+  APP_DIRECTORY: .
+  RELEASE_WORKFLOW: build-release.yml
+concurrency:
+  group: guadalupe-agent
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verificar contrato do executor
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          node - <<'NODE'
+          const fs = require('fs'), path = require('path');
+          const key = (process.env.OPENAI_API_KEY || '').trim();
+          if (!key.startsWith('sk-')) throw new Error('Chave OpenAI ausente ou invalida.');
+          const pkgPath = path.join(process.env.APP_DIRECTORY, 'package.json');
+          if (!fs.existsSync(pkgPath)) throw new Error('Diretorio do aplicativo sem package.json.');
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8').replace(/^\uFEFF/, ''));
+          if (!fs.existsSync('.github/workflows/' + process.env.RELEASE_WORKFLOW)) throw new Error('Workflow de release ausente.');
+          const info = `Infraestrutura conferida. Testes existentes: ${pkg.scripts?.test || 'ausentes: exigir regressao antes de publicar'}. Nenhuma alteracao nem chamada de IA neste preflight.`;
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, info);
+          console.log(info);
+          NODE
+  agent:
+    needs: preflight
+    if: inputs.preflight_only != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Preparar pedido
+        id: task
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ github.event.client_payload.issue_number || inputs.issue_number }}
+        with:
+          script: |
+            const fs = require('fs');
+            const payload = context.payload.client_payload || {};
+            let number = Number(process.env.ISSUE_NUMBER || 0);
+            let body = payload.message || payload.admin_note || '';
+            if (number) {
+              const issue = await github.rest.issues.get({...context.repo, issue_number: number});
+              body = issue.data.body || '';
+            } else {
+              body = JSON.stringify(payload, null, 2);
+              const issue = await github.rest.issues.create({...context.repo, title: '[Guadalupe] Ticket aprovado', body});
+              number = issue.data.number;
+            }
+            core.setOutput('issue', String(number));
+            fs.writeFileSync('/tmp/guadalupe-request.txt', `Voce e Guadalupe, agente tecnica da GHZ Plugin. Investigue e resolva o pedido abaixo neste repositorio. Leia o contexto, localize o fluxo real e rode testes. Nao transfira verificacoes que pode fazer para o administrador. Nao invente diagnostico. Se houver um defeito comprovado no codigo, corrija minimamente e adicione teste de regressao. Nao altere workflows, segredos, licencas, dados de clientes nem versao. Nao publique nada: o workflow cuida disso. Se depender de configuracao externa inacessivel, explique precisamente o bloqueio. Nao considere melhor mensagem de erro como correcao da causa. Responda em portugues com diagnostico, testes, limitacoes e se a causa foi de fato corrigida.\n\nPEDIDO AUTORIZADO:\n${body}`);
+            await github.rest.issues.createComment({...context.repo, issue_number: number, body: `Guadalupe iniciou a analise real no GitHub. Execucao: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`});
+      - name: Dependencias
+        working-directory: ${{ env.APP_DIRECTORY }}
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: |
+          if [ -f package-lock.json ]; then npm ci --ignore-scripts; elif [ -f package.json ]; then npm install --ignore-scripts; fi
+      - name: Guadalupe investiga e corrige
+        id: agent
+        uses: openai/codex-action@f367b1e9572fd064ea71ef925ca24ee0f01080af
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-5.4-mini
+          effort: high
+          permission-profile: ':workspace'
+          prompt-file: /tmp/guadalupe-request.txt
+          output-file: /tmp/guadalupe-result.json
+          output-schema: |
+            {"type":"object","properties":{"resolved":{"type":"boolean"},"summary":{"type":"string"},"tests":{"type":"string"},"blockers":{"type":"string"}},"required":["resolved","summary","tests","blockers"],"additionalProperties":false}
+      - name: Validar resultado e testes
+        id: verify
+        run: |
+          node - <<'NODE'
+          const fs = require('fs'), cp = require('child_process');
+          const result = JSON.parse(fs.readFileSync('/tmp/guadalupe-result.json', 'utf8'));
+          if (!result.resolved) { fs.appendFileSync(process.env.GITHUB_OUTPUT, 'resolved=false\n'); process.exit(0); }
+          const files = cp.execFileSync('git', ['status','--porcelain'], {encoding:'utf8'}).split('\n').filter(Boolean).map(line => line.slice(3));
+          if (!files.length) throw new Error('Agente disse resolvido sem alteracao verificavel.');
+          if (files.some(path => /(^|\/)(\.github|\.env|node_modules|dist)|lock\.json$/.test(path))) throw new Error('Alteracao fora do escopo permitido.');
+          const directory = process.env.APP_DIRECTORY;
+          const pkg = JSON.parse(fs.readFileSync(require('path').join(directory, 'package.json'), 'utf8'));
+          if (!pkg.scripts?.test) throw new Error('Repositorio sem comando de testes; release automatica bloqueada.');
+          cp.execFileSync('npm', ['test'], {stdio:'inherit', cwd: directory});
+          cp.execFileSync('git', ['diff','--check'], {stdio:'inherit'});
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'resolved=true\n');
+          NODE
+      - name: Commit da correcao testada
+        if: steps.verify.outputs.resolved == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ISSUE: ${{ steps.task.outputs.issue }}
+        run: |
+          git config user.name 'Guadalupe GHZ'
+          git config user.email 'actions@users.noreply.github.com'
+          git add --all
+          git commit -m "fix: Guadalupe resolve tarefa #$ISSUE"
+          git push origin "HEAD:$DEFAULT_BRANCH"
+          gh workflow run "$RELEASE_WORKFLOW" --ref "$DEFAULT_BRANCH"
+      - name: Registrar resultado
+        if: always() && steps.task.outputs.issue != ''
+        uses: actions/github-script@v7
+        env:
+          ISSUE: ${{ steps.task.outputs.issue }}
+          RESULT: ${{ job.status }}
+          RESOLVED: ${{ steps.verify.outputs.resolved }}
+        with:
+          script: |
+            const fs = require('fs');
+            let report = 'A execucao falhou antes de produzir um diagnostico. Consulte o log.';
+            if (fs.existsSync('/tmp/guadalupe-result.json') && fs.readFileSync('/tmp/guadalupe-result.json', 'utf8').trim()) {
+              const r = JSON.parse(fs.readFileSync('/tmp/guadalupe-result.json', 'utf8'));
+              report = `${r.summary}\n\nTestes: ${r.tests}\n\nBloqueios: ${r.blockers}`;
+            }
+            const state = process.env.RESULT === 'success' && process.env.RESOLVED === 'true' ? 'Correcao commitada; build solicitado. Ainda nao confirma instalador disponivel.' : 'Sem release confirmada.';
+            await github.rest.issues.createComment({...context.repo, issue_number: Number(process.env.ISSUE), body: `Guadalupe: ${process.env.RESULT}. ${state}\n\n${report}\n\nhttps://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`});
