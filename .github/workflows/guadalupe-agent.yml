@@ -50,7 +50,7 @@ jobs:
     needs: preflight
     if: inputs.preflight_only != true
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
         with:
@@ -79,7 +79,7 @@ jobs:
             }
             core.setOutput('issue', String(number));
             core.setOutput('mode', payload.execution_mode || 'fix');
-            fs.writeFileSync('/tmp/guadalupe-request.txt', `Voce e Guadalupe, agente tecnica da GHZ Plugin. Investigue e resolva o pedido abaixo neste repositorio. Leia o contexto, localize o fluxo real e rode testes. Nao transfira verificacoes que pode fazer para o administrador. Nao invente diagnostico. Se houver um defeito comprovado no codigo, corrija minimamente e adicione teste de regressao. Nao altere workflows, segredos, licencas, dados de clientes nem versao. Nao publique nada: o workflow cuida disso. Se depender de configuracao externa inacessivel, explique precisamente o bloqueio. Nao considere melhor mensagem de erro como correcao da causa. Responda em portugues com diagnostico, testes, limitacoes e se a causa foi de fato corrigida.\n\nPEDIDO AUTORIZADO:\n${body}`);
+            fs.writeFileSync('/tmp/guadalupe-request.txt', `Voce e Guadalupe, agente tecnica da GHZ Plugin. Investigue e resolva o pedido abaixo neste repositorio. Leia o contexto, localize o fluxo real e rode testes. Nao transfira verificacoes que pode fazer para o administrador. Nao invente diagnostico. Audite estaticamente o contrato entre chamadas, payloads, documentacao e testes antes de atribuir a causa a um servico externo; DNS ou endpoint indisponivel nao bloqueia essa verificacao local. Se houver um defeito comprovado no codigo, corrija minimamente e adicione teste de regressao. Nao altere workflows, segredos, licencas, dados de clientes nem versao. Nunca execute git commit, git push ou build de release: o workflow faz essas etapas depois. Falta de permissao para gravar em .git nao e bloqueio. Quando os arquivos estiverem corrigidos e os testes locais passarem, retorne resolved=true para o workflow publicar a mudanca. Se depender de configuracao externa inacessivel, explique precisamente o bloqueio somente depois de excluir defeitos verificaveis no repositorio. Nao considere melhor mensagem de erro como correcao da causa. Responda em portugues com diagnostico, testes, limitacoes e se a causa foi de fato corrigida.\n\nPEDIDO AUTORIZADO:\n${body}`);
             await github.rest.issues.createComment({...context.repo, issue_number: number, body: `Guadalupe iniciou a analise real no GitHub. Execucao: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`});
       - name: Dependencias
         working-directory: ${{ env.APP_DIRECTORY }}
@@ -92,8 +92,8 @@ jobs:
         uses: openai/codex-action@f367b1e9572fd064ea71ef925ca24ee0f01080af
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          model: gpt-5.4-mini
-          effort: high
+          model: gpt-5.6-luna
+          effort: medium
           permission-profile: ':workspace'
           prompt-file: /tmp/guadalupe-request.txt
           output-file: /tmp/guadalupe-result.json
