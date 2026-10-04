@@ -2,8 +2,10 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron')
 const path    = require('path')
 const fs      = require('fs')
 const os      = require('os')
-const { execSync, exec } = require('child_process')
-const createLocalLicenseGate = require('./js/local-license-gate')
+const crypto  = require('crypto')
+const https   = require('https')
+const http    = require('http')
+const { execSync, exec, execFileSync } = require('child_process')
 
 app.setName('CleanBoost')
 
@@ -28,9 +30,200 @@ function salvarJSON(nome, dados) {
 
 // ── JANELA ─────────────────────────────────────────────────
 let win = null
-const licenseGate = createLocalLicenseGate({
-  storageKey: '@CLEANBOOST:licenca', prefix: 'CLEAN', salt: 'GHZ2026CLEANBOOST', multiplier: 41
-})
+let ghzBackend = null
+const APP_ID = 'cleanboost'
+const LICENSE_API_URL = process.env.CLEANBOOST_LICENSE_API_URL || process.env.GHZ_LICENSE_API_URL || 'https://ghzplugin.com.br/api/ghz-license.php'
+
+function createLicenseBackend({ app, ipcMain, getDataDir, appId }) {
+  let sessionAuthorized = false
+
+  function requestLicense(action, payload = {}) {
+    return new Promise(resolve => {
+      const url = new URL(LICENSE_API_URL)
+      url.searchParams.set('action', action)
+      const body = Buffer.from(JSON.stringify(payload), 'utf8')
+      const client = url.protocol === 'http:' ? http : https
+      const req = client.request(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': body.length,
+          'User-Agent': `${appId}-license`
+        }
+      }, res => {
+        const chunks = []
+        res.on('data', chunk => chunks.push(chunk))
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks).toString('utf8')
+          let json = null
+          try { json = raw ? JSON.parse(raw) : null } catch (e) {}
+          resolve(json && typeof json === 'object'
+            ? json
+            : { ok: false, code: 'license_api_error', message: `License API HTTP ${res.statusCode}` })
+        })
+      })
+      req.on('error', error => resolve({
+        ok: false,
+        code: 'license_api_error',
+        message: error?.message || 'Servidor de licenca indisponivel no momento.'
+      }))
+      req.setTimeout(20000, () => req.destroy(new Error('Tempo limite no servidor de licenca GHZ.')))
+      req.write(body)
+      req.end()
+    })
+  }
+
+  function machineGuid() {
+    if (process.platform !== 'win32') return ''
+    try {
+      const out = execFileSync('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: 3000
+      })
+      const match = out.match(/MachineGuid\s+REG_SZ\s+([^\r\n]+)/i)
+      return match ? match[1].trim() : ''
+    } catch (e) {
+      return ''
+    }
+  }
+
+  function getDeviceInfo() {
+    let username = ''
+    try { username = os.userInfo().username } catch (e) {}
+    const base = [machineGuid(), os.hostname(), username, os.platform(), os.arch()].join('|')
+    return {
+      device_hash: crypto.createHash('sha256').update(`ghz-license-v1|${base}`).digest('hex'),
+      device_name: os.hostname(),
+      device_os: `${os.type()} ${os.release()} ${os.arch()}`,
+      app_version: app.getVersion()
+    }
+  }
+
+  function statePath() {
+    return path.join(getDataDir(), 'license-state.json')
+  }
+
+  function readState() {
+    try { return JSON.parse(fs.readFileSync(statePath(), 'utf8') || '{}') } catch (e) { return {} }
+  }
+
+  function saveState(patch = {}) {
+    const dir = getDataDir()
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const state = {
+      active: false,
+      app_id: appId,
+      license_key: '',
+      customer_name: '',
+      activated_at: '',
+      last_validated_at: '',
+      last_error: '',
+      ...readState(),
+      ...patch
+    }
+    fs.writeFileSync(statePath(), JSON.stringify(state, null, 2), 'utf8')
+    return state
+  }
+
+  async function activate(key, phone) {
+    const licenseKey = String(key || '').trim().toUpperCase()
+    if (!licenseKey) return { ok: false, code: 'missing_license', message: 'Informe a chave de licenca.' }
+    const device = getDeviceInfo()
+    const result = await requestLicense('activate', {
+      p_app_id: appId,
+      p_license_key: licenseKey,
+      p_device_hash: device.device_hash,
+      p_device_name: device.device_name,
+      p_device_os: device.device_os,
+      p_app_version: device.app_version,
+      p_customer_phone: String(phone || '')
+    })
+    if (!result?.ok) {
+      sessionAuthorized = false
+      saveState({ active: false, license_key: licenseKey, last_error: result?.message || 'Licenca invalida.' })
+      return result || { ok: false, message: 'Licenca invalida.' }
+    }
+    const saved = saveState({
+      active: true,
+      app_id: appId,
+      license_key: licenseKey,
+      customer_name: result.customer_name || '',
+      activated_at: result.activated_at || new Date().toISOString(),
+      last_validated_at: new Date().toISOString(),
+      last_error: ''
+    })
+    sessionAuthorized = true
+    return { ...result, license_key: saved.license_key, customer_name: saved.customer_name }
+  }
+
+  async function validate() {
+    const state = readState()
+    const licenseKey = String(state.license_key || '').trim().toUpperCase()
+    if (!licenseKey) {
+      sessionAuthorized = false
+      return { ok: false, code: 'missing_license', message: 'Licenca nao ativada.' }
+    }
+    const device = getDeviceInfo()
+    const result = await requestLicense('validate', {
+      p_app_id: appId,
+      p_license_key: licenseKey,
+      p_device_hash: device.device_hash,
+      p_device_name: device.device_name,
+      p_device_os: device.device_os,
+      p_app_version: device.app_version
+    })
+    if (!result?.ok) {
+      sessionAuthorized = false
+      saveState({ active: false, last_error: result?.message || 'Licenca invalida.' })
+      return result || { ok: false, message: 'Licenca invalida.' }
+    }
+    const saved = saveState({
+      active: true,
+      app_id: appId,
+      customer_name: result.customer_name || state.customer_name || '',
+      last_validated_at: new Date().toISOString(),
+      last_error: ''
+    })
+    sessionAuthorized = true
+    return { ...result, source: 'online', license_key: saved.license_key, customer_name: saved.customer_name }
+  }
+
+  ipcMain.handle('license:get-state', async () => readState())
+  ipcMain.handle('license:device-info', async () => {
+    const device = getDeviceInfo()
+    return {
+      device_hash_preview: device.device_hash.slice(0, 12),
+      device_name: device.device_name,
+      device_os: device.device_os
+    }
+  })
+  ipcMain.handle('license:activate', async (_event, { license_key, phone } = {}) => activate(license_key, phone))
+  ipcMain.handle('license:validate', async () => validate())
+
+  return {
+    validateForStartup: validate,
+    isSessionAuthorized: () => sessionAuthorized
+  }
+}
+
+function isLicensePageUrl(url) {
+  try {
+    return decodeURIComponent(new URL(url).pathname)
+      .replace(/\\/g, '/')
+      .endsWith('/pages/licenca.html')
+  } catch (e) {
+    return false
+  }
+}
+
+function attachLicenseNavigationGate(targetWindow) {
+  targetWindow.webContents.on('will-navigate', (event, url) => {
+    if (ghzBackend?.isSessionAuthorized?.() || isLicensePageUrl(url)) return
+    event.preventDefault()
+    targetWindow.loadFile('pages/licenca.html').catch(() => {})
+  })
+}
 
 app.on('second-instance', () => {
   if (!win) return
@@ -53,7 +246,8 @@ function createWindow() {
       additionalArguments: ['--data-dir=' + dir]
     }
   })
-  licenseGate.attach(win)
+  ghzBackend = createLicenseBackend({ app, ipcMain, getDataDir, appId: APP_ID })
+  attachLicenseNavigationGate(win)
   win.once('ready-to-show', () => { win.show(); win.focus() })
   setTimeout(() => { if (win && !win.isVisible()) win.show() }, 4000)
   win.on('page-title-updated', e => e.preventDefault())
@@ -437,12 +631,21 @@ ipcMain.handle('hist:limpar', async () => { salvarJSON('historico', []); return 
 // ── DADOS ──────────────────────────────────────────────────
 ipcMain.handle('dados:ler',    async (e, nome) => lerJSON(nome, {}))
 ipcMain.handle('dados:salvar', async (e, nome, dados) => { salvarJSON(nome, dados); return { ok: true } })
+ipcMain.handle('app:get-config', async () => ({ app_id: APP_ID, name: app.getName(), version: app.getVersion() }))
+ipcMain.handle('app:open-main-after-activation', async () => {
+  if (!win || win.isDestroyed()) return { ok: false, message: 'Janela do CleanBoost indisponivel.' }
+  const result = await ghzBackend.validateForStartup({ forceOnline: true })
+  if (!result?.ok) return result || { ok: false, message: 'Nao foi possivel validar a licenca.' }
+  await win.loadFile('index.html')
+  return { ok: true }
+})
 
 // ── CICLO ──────────────────────────────────────────────────
 app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return
   createWindow()
   await win.loadFile('pages/licenca.html')
-  if (await licenseGate.authorizeFromStorage(win)) await win.loadFile('index.html')
+  const startupLicense = await ghzBackend.validateForStartup({ forceOnline: true })
+  if (startupLicense?.ok) await win.loadFile('index.html')
 })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
