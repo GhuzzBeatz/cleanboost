@@ -1,6 +1,6 @@
 {
   "name": "cleanboost",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "CleanBoost — Limpeza e Otimização de PC",
   "main": "main.js",
   "author": "GHZ Plugin",
@@ -11,6 +11,7 @@
   "build": {
     "appId": "com.ghzplugin.cleanboost",
     "productName": "CleanBoost",
+    "artifactName": "CleanBoost.Setup.${version}.${ext}",
     "directories": {
       "output": "dist_installer"
     },
