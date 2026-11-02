@@ -7,7 +7,7 @@ Este arquivo e a memoria curta do app para abrir tarefas novas sem depender de c
 - Pasta local principal: manter conforme projeto local do app
 - Repositorio GitHub: https://github.com/GhuzzBeatz/cleanboost
 - package.name: cleanboost
-- package.version atual: 1.0.4
+- package.version atual: 1.0.5
 - build.productName: CleanBoost
 - build.appId: com.ghzplugin.cleanboost
 - ID publico de download/update: cleanboost
@@ -26,14 +26,14 @@ Este arquivo e a memoria curta do app para abrir tarefas novas sem depender de c
 
 ## Licenca e seguranca
 - Licenca validada online pelo backend PHP: https://ghzplugin.com.br/api/ghz-license.php. Administracao dos dados via phpMyAdmin.
-- Nao trocar salt, multiplicador, prefixo ou formato sem criar compatibilidade com licencas ja emitidas.
-- Preservar a validacao online via PHP e a compatibilidade com licencas ja emitidas.
+- Preservar prefixo, formato e compatibilidade com licencas ja emitidas.
+- Nunca incluir credenciais do servidor ou banco de dados no app.
 
 ## Downloads e releases
 - GHZ update API: https://ghzplugin.com.br/api/ghz-update.php
 - Manifest: https://ghzplugin.com.br/api/ghz-update.php?app=cleanboost
 - Download direto: https://ghzplugin.com.br/api/ghz-update.php?app=cleanboost&download=1
-- Versao publicada no manifest local: 1.0.4
+- Versao publicada no manifest local: 1.0.5
 - Repo release usado pelo roteador: https://github.com/GhuzzBeatz/cleanboost/releases
 - Asset esperado pelo roteador de downloads: CleanBoost.Setup.exe
 - Se o repositorio for privado, o token de GitHub fica apenas como secret do servidor PHP/GitHub Actions, nunca dentro do app.
