@@ -238,7 +238,7 @@ function createWindow() {
 
   win = new BrowserWindow({
     width: 1300, height: 840, minWidth: 1100, minHeight: 700,
-    title: 'CleanBoost', autoHideMenuBar: true, show: false,
+    title: 'CleanBoost', autoHideMenuBar: true, show: false, frame: false,
     webPreferences: {
       nodeIntegration: true, nodeIntegrationInSubFrames: true,
       contextIsolation: false, webSecurity: false,
@@ -251,6 +251,16 @@ function createWindow() {
   win.once('ready-to-show', () => { win.show(); win.focus() })
   setTimeout(() => { if (win && !win.isVisible()) win.show() }, 4000)
   win.on('page-title-updated', e => e.preventDefault())
+}
+
+// Window controls used by the shared GHZ layout (also on the activation page).
+for (const action of ['minimize', 'maximize', 'close']) {
+  ipcMain.on('window:' + action, event => {
+    if (!win || win.isDestroyed() || event.sender !== win.webContents) return
+    if (action === 'minimize') win.minimize()
+    else if (action === 'maximize') win.isMaximized() ? win.unmaximize() : win.maximize()
+    else win.close()
+  })
 }
 
 // ── HELPERS ────────────────────────────────────────────────
@@ -499,6 +509,15 @@ ipcMain.handle('limpar:executar', async (event, ids) => {
 })
 
 // ── INICIALIZAÇÃO ──────────────────────────────────────────
+const { hashStartupItem, openVirusTotal } = require('./js/startup-security')
+let startupItems = []
+ipcMain.handle('startup:hash', async (event, caminho) => {
+  const item = typeof caminho === 'string' && startupItems.find(item => item.caminho === caminho)
+  if (!item) return { ok: false, erro: 'Atualize a lista e selecione um programa de inicialização.' }
+  return hashStartupItem(item, shell)
+})
+ipcMain.handle('startup:openVirusTotal', (event, hash) => openVirusTotal(hash, shell))
+
 ipcMain.handle('inicio:listar', async () => {
   const items = []
   const seen  = new Set()
@@ -580,6 +599,7 @@ ipcMain.handle('inicio:listar', async () => {
     }
   } catch(e) {}
 
+  startupItems = items
   return { items }
 })
 

@@ -14,7 +14,11 @@ button:hover{background:linear-gradient(135deg,#cc0000,#ff1a1a);box-shadow:0 4px
 .msg-ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:10px 14px;font-size:13px;color:#22c55e;display:none;margin-bottom:10px}
 .device{font-size:11px;color:#555;line-height:1.6;border:1px solid #242424;background:#111;border-radius:8px;padding:9px 11px;margin:6px 0 12px;text-align:left;display:none}
 .suporte{font-size:11px;color:#3a3a3a;margin-top:14px;line-height:1.8}.suporte a{color:#cc0000;text-decoration:none}
-</style></head><body>
+</style><link rel="stylesheet" href="../css/app-standard.css">
+<link rel="stylesheet" href="../css/cleanboost-standard.css">
+</head><body class="license-page" data-page-panel="licenca">
+<div class="license-window-controls"></div>
+<div class="page-heading license-help"></div>
 <div class="card">
   <div class="icon"><img src="../logo.png" style="width:80px;height:80px;object-fit:contain;border-radius:16px"></div>
   <h1><span style="color:#e60000">Clean</span>Boost</h1>
@@ -78,4 +82,8 @@ document.getElementById('inputPhone').addEventListener('keydown',e=>{if(e.key===
     if(config?.version) document.title=`CleanBoost ${config.version} - Ativacao`
   }catch(e){}
 })()
-</script></body></html>
+</script><script src="../components/ghz-window-bar.js" data-target=".license-window-controls" data-accent="var(--accent)"></script>
+<script src="../js/standard-theme.js"></script>
+<script src="../js/page-help-content.js"></script>
+<script src="../components/ghz-page-help.js"></script>
+</body></html>

@@ -1,7 +1,9 @@
 <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
-<link rel="stylesheet" href="../css/style.css"><script src="../js/util.js"></script></head><body>
-<div class="page-content">
-  <div class="page-hdr-row page-header">
+<link rel="stylesheet" href="../css/style.css"><script src="../js/util.js"></script><link rel="stylesheet" href="../css/app-standard.css">
+<link rel="stylesheet" href="../css/cleanboost-standard.css">
+</head><body>
+<div data-page-panel="historico" class="page-content">
+  <div class="page-heading page-hdr-row page-header">
     <div><h1>📋 Histórico de <span>Limpezas</span></h1><p>Registro de todas as limpezas realizadas</p></div>
     <button class="btn btn-ghost" onclick="limpar()" style="color:var(--red3);border-color:var(--red-bdr)">🗑️ Limpar Histórico</button>
   </div>
@@ -43,4 +45,7 @@ async function limpar() {
   })
 }
 carregar()
-</script></body></html>
+</script><script src="../js/standard-theme.js"></script>
+<script src="../js/page-help-content.js"></script>
+<script src="../components/ghz-page-help.js"></script>
+</body></html>

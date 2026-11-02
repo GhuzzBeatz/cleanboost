@@ -157,6 +157,12 @@ next = replaceSection(next, "Identidade", `
 - Objetivo: ${objective}
 `);
 
+next = replaceSection(next, "Licenca e seguranca", `
+- Licenca validada online pelo backend PHP: https://ghzplugin.com.br/api/ghz-license.php. Administracao dos dados via phpMyAdmin.
+- Preservar prefixo, formato e compatibilidade com licencas ja emitidas.
+- Nunca incluir credenciais do servidor ou banco de dados no app.
+`);
+
 next = replaceSection(next, "Downloads e releases", `
 - GHZ update API: https://ghzplugin.com.br/api/ghz-update.php
 - Manifest: ${manifestUrl}
@@ -164,7 +170,7 @@ next = replaceSection(next, "Downloads e releases", `
 - Versao publicada no manifest local: ${manifest.version || version || "nao informada"}
 - Repo release usado pelo roteador: ${repo ? `${repo}/releases` : "releases do repositorio atual"}
 - Asset esperado pelo roteador de downloads: ${releaseAssetName(pkg)}
-- Se o repositorio for privado, o token de GitHub fica apenas como secret da Edge Function/GitHub Actions, nunca dentro do app.
+- Se o repositorio for privado, o token de GitHub fica apenas como secret do servidor PHP/GitHub Actions, nunca dentro do app.
 - Notas de release nao devem vazar URL interna, token ou link temporario.
 `);
 
@@ -181,7 +187,7 @@ next = replaceSection(next, "Stack e pontos de entrada", `
 - Scripts npm: ${Object.keys(pkg.scripts || {}).join(", ") || "nenhum script declarado"}
 - Telas ficam normalmente em index.html, pages/, components/, js/, css/ e assets/.
 - Base de ajuda IA, quando existir, fica em docs/ai/.
-- Backend/edge functions, quando existir, fica em cloud/ ou supabase/.
+- Backend PHP externo em https://ghzplugin.com.br/api/; codigo PHP ausente nesta copia.
 - Testes, quando existirem, ficam em tests/; validar pelo script npm test ou validacao direcionada antes de release.
 `);
 

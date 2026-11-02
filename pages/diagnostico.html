@@ -16,6 +16,8 @@
 @keyframes spin { to { transform:rotate(360deg) } }
 @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.5} }
 </style>
+<link rel="stylesheet" href="../css/app-standard.css">
+<link rel="stylesheet" href="../css/cleanboost-standard.css">
 </head><body>
 
 <!-- LOADING -->
@@ -32,8 +34,8 @@
 </div>
 
 <!-- CONTEÚDO -->
-<div class="page-content" id="conteudo" style="display:none">
-  <div class="page-hdr-row page-header">
+<div data-page-panel="diagnostico" class="page-content" id="conteudo" style="display:none">
+  <div class="page-heading page-hdr-row page-header">
     <div><h1>🖥️ Diagnóstico do <span>PC</span></h1><p>Hardware, alertas e desempenho em tempo real</p></div>
     <button class="btn btn-outline" onclick="carregar()" id="btnAtualizar">🔄 Atualizar</button>
   </div>
@@ -207,4 +209,7 @@ setInterval(async () => {
     document.getElementById('monitorTick').textContent = 'Atualizado: ' + new Date().toLocaleTimeString('pt-BR')
   }
 }, 5000)
-</script></body></html>
+</script><script src="../js/standard-theme.js"></script>
+<script src="../js/page-help-content.js"></script>
+<script src="../components/ghz-page-help.js"></script>
+</body></html>

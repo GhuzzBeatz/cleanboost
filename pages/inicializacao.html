@@ -5,6 +5,8 @@
 .loading-spinner{width:44px;height:44px;border:4px solid var(--border2);border-top-color:var(--red2);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
+<link rel="stylesheet" href="../css/app-standard.css">
+<link rel="stylesheet" href="../css/cleanboost-standard.css">
 </head><body>
 
 <div class="loading-overlay" id="loading">
@@ -14,8 +16,8 @@
   <div style="font-size:12px;color:var(--muted)">Consultando o registro do Windows</div>
 </div>
 
-<div class="page-content" id="conteudo" style="display:none">
-  <div class="page-hdr-row page-header">
+<div data-page-panel="inicializacao" class="page-content" id="conteudo" style="display:none">
+  <div class="page-heading page-hdr-row page-header">
     <div>
       <h1>🚀 Programas de <span>Inicialização</span></h1>
       <p>Programas que abrem automaticamente com o Windows. Desative os desnecessários para acelerar a inicialização.</p>
@@ -28,6 +30,12 @@
   </div>
 
   <div id="contadorBox" style="margin-bottom:12px;font-size:13px;color:var(--muted)"></div>
+  <section class="card virus-total-info" aria-labelledby="virusTotalTitle">
+    <h2 id="virusTotalTitle">O que é o VirusTotal?</h2>
+    <p>O VirusTotal reúne resultados de vários antivírus e serviços de segurança para ajudar a identificar arquivos suspeitos. Ele oferece uma consulta de reputação; não substitui o antivírus do seu computador.</p>
+    <p>Ao clicar em <strong>Verificar no VirusTotal</strong>, o CleanBoost calcula a “impressão digital” do programa (SHA-256) e abre o relatório no seu navegador. <strong>Nenhum arquivo é enviado pelo CleanBoost.</strong> Apenas essa impressão digital é compartilhada com o site.</p>
+    <p>Se o relatório não for encontrado, não há um resultado disponível para esse hash — isso não significa que o arquivo seja perigoso ou seguro. Uma detecção isolada pode ser um falso positivo. Para comandos com argumentos, a consulta considera apenas o executável, não os arquivos que ele pode abrir.</p>
+  </section>
 
   <div class="card tbl-wrap">
     <table>
@@ -64,11 +72,13 @@ async function carregar() {
           : item.registro.includes('HKCU') ? 'Usuário' : 'Sistema'
         const corOrigem = origem === 'Sistema' ? 'b-red' : origem === 'Pasta Startup' ? 'b-yellow' : 'b-blue'
         return `<tr id="row_${i}">
-          <td style="font-weight:700;color:var(--fg)">${item.nome || '(sem nome)'}</td>
-          <td style="font-size:11px;color:var(--muted);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.caminho}">${item.caminho}</td>
+          <td class="startup-name" style="font-weight:700;color:var(--fg)"></td>
+          <td class="startup-path" style="font-size:11px;color:var(--muted);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></td>
           <td><span class="badge ${corOrigem}">${origem}</span></td>
           <td style="text-align:center">
             <button class="btn btn-red" style="font-size:11px;padding:5px 14px" onclick="desativar(${i})">🗑️ Desativar</button>
+            <button class="btn btn-outline" style="font-size:11px;padding:5px 14px" onclick="verificar(${i},this)">Verificar no VirusTotal</button>
+            <div class="startup-hash" style="font-size:11px" aria-live="polite"></div>
           </td>
         </tr>`}).join('')
     : `<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--muted)">
@@ -76,6 +86,31 @@ async function carregar() {
         <div style="font-size:13px">Nenhum programa de inicialização encontrado.</div>
         <div style="font-size:11px;margin-top:4px;color:#444">Tente executar o app como administrador para ver todos os programas.</div>
       </td></tr>`
+  _items.forEach((item, i) => {
+    const row = document.getElementById(`row_${i}`)
+    row.querySelector('.startup-name').textContent = item.nome || '(sem nome)'
+    row.querySelector('.startup-path').textContent = item.caminho
+    row.querySelector('.startup-path').title = item.caminho
+  })
+}
+
+async function verificar(i, button) {
+  const item = _items[i]
+  const status = button.parentElement.querySelector('.startup-hash')
+  button.disabled = true
+  status.textContent = 'Calculando SHA-256…'
+  try {
+    const result = await ipcRenderer.invoke('startup:hash', item.caminho)
+    if (!result.ok) throw new Error(result.erro)
+    status.textContent = `SHA-256: ${result.hash.slice(0, 12)}…${result.hash.slice(-8)}`
+    status.title = result.hash
+    const opened = await ipcRenderer.invoke('startup:openVirusTotal', result.hash)
+    if (!opened.ok) throw new Error(opened.erro)
+  } catch (error) {
+    status.textContent = 'Não foi possível consultar: ' + error.message
+  } finally {
+    button.disabled = false
+  }
 }
 
 async function desativar(i) {
@@ -107,4 +142,7 @@ function renderizar() {
 }
 
 carregar()
-</script></body></html>
+</script><script src="../js/standard-theme.js"></script>
+<script src="../js/page-help-content.js"></script>
+<script src="../components/ghz-page-help.js"></script>
+</body></html>

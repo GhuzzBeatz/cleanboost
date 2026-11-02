@@ -4,57 +4,66 @@
 <meta charset="UTF-8">
 <title>CleanBoost</title>
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/app-standard.css">
+<link rel="stylesheet" href="css/cleanboost-standard.css">
 </head>
 <body>
-<div class="app">
+<div class="app app-shell">
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-icon" style="background:transparent;padding:0;overflow:hidden"><img src="logo.png" style="width:40px;height:40px;object-fit:cover;border-radius:12px"></div>
-      <div>
-        <div class="logo-brand"><span>Clean</span>Boost</div>
-        <div class="logo-sub">Otimizador de PC</div>
+  <aside class="sidebar" id="standardSidebar">
+      <header class="app-brand">
+        <img class="brand-banner" id="brandBanner" src="logo.png" alt="" draggable="false">
+        <strong class="brand-title" data-app-name>CleanBoost</strong>
+        <span class="app-brand-icon" data-app-logo><img src="logo.png" alt="CleanBoost" width="38" height="38"></span>
+        <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Recolher menu" aria-expanded="true" aria-controls="standardSidebar" title="Recolher menu"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/></svg></button>
+      </header>
+      <div class="menu-search">
+        <button id="menuSearchFocus" type="button" aria-label="Pesquisar abas" title="Pesquisar abas"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg></button>
+        <input id="menuSearch" type="search" placeholder="Pesquisar abas..." aria-label="Pesquisar abas" autocomplete="off" spellcheck="false">
       </div>
-    </div>
 
     <nav class="sidebar-nav">
-      <button class="nav-btn active" onclick="ir('pages/dashboard.html',this)">
+      <button class="nav-button nav-btn active" onclick="ir('pages/dashboard.html',this)">
         <span class="nav-icon">🏠</span> Dashboard
       </button>
-      <button class="nav-btn" onclick="ir('pages/limpeza.html',this)">
+      <button class="nav-button nav-btn" onclick="ir('pages/limpeza.html',this)">
         <span class="nav-icon">🧹</span> Limpeza
       </button>
-      <button class="nav-btn" onclick="ir('pages/diagnostico.html',this)">
+      <button class="nav-button nav-btn" onclick="ir('pages/diagnostico.html',this)">
         <span class="nav-icon">🖥️</span> Diagnóstico do PC
       </button>
-      <button class="nav-btn" onclick="ir('pages/inicializacao.html',this)">
+      <button class="nav-button nav-btn" onclick="ir('pages/inicializacao.html',this)">
         <span class="nav-icon">🚀</span> Inicialização
       </button>
-      <button class="nav-btn" onclick="ir('pages/energia.html',this)">
+      <button class="nav-button nav-btn" onclick="ir('pages/energia.html',this)">
         <span class="nav-icon">⚡</span> Energia
       </button>
-      <button class="nav-btn" onclick="ir('pages/historico.html',this)">
+      <button class="nav-button nav-btn" onclick="ir('pages/historico.html',this)">
         <span class="nav-icon">📋</span> Histórico
       </button>
+    <p class="menu-search-empty" id="menuSearchEmpty" hidden>Nenhuma aba encontrada.</p>
     </nav>
+    <span id="menuSearchStatus" class="sr-only" role="status" aria-live="polite"></span>
 
-    <div class="sidebar-footer">
+    <div class="sidebar-footer menu-footer">
+      <div class="menu-window-controls"></div>
+      <div class="menu-footer-support"></div>
       <div class="ghz-brand">GHZ Plugin</div>
       <div class="version-txt">CleanBoost v1.0</div>
     </div>
   </aside>
 
   <!-- MAIN -->
-  <div class="main">
+  <div class="main workspace">
     <div class="topbar">
       <div class="topbar-title" id="topbarTitle">🏠 Dashboard</div>
       <div class="topbar-right">
         <div id="topbarClock" style="font-family:monospace;font-size:13px;color:#555"></div>
       </div>
     </div>
-    <div class="page">
-      <iframe id="frame" class="iframe-page" src="pages/dashboard.html"></iframe>
+    <div class="page active">
+      <iframe id="frame" class="iframe-page" title="Conte?do da aba" src="pages/dashboard.html"></iframe>
     </div>
   </div>
 
@@ -84,6 +93,9 @@ function tick() {
 }
 tick(); setInterval(tick, 1000)
 </script>
-<script src="js/ghz-support.js" data-target=".sidebar-footer" data-accent="#e60000"></script>
+<script src="js/ghz-support.js" data-target=".menu-footer-support" data-accent="#e60000"></script>
+<script src="components/ghz-navigation.js"></script>
+<script src="js/standard-theme.js"></script>
+<script src="components/ghz-window-bar.js" data-target=".menu-window-controls" data-accent="var(--accent)"></script>
 </body>
 </html>
